@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitch Chat Overlay</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 600px;
+      width: 100%;
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: #1a1a1a;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 40px;
+      font-size: 16px;
+    }
+
+    .modes {
+      display: grid;
+      gap: 20px;
+    }
+
+    .mode-card {
+      border: 2px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 24px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.3s;
+      display: block;
+    }
+
+    .mode-card:hover {
+      border-color: #667eea;
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(102, 126, 234, 0.2);
+    }
+
+    .mode-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .mode-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+
+    .mode-description {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+
+    .mode-use-case {
+      font-size: 13px;
+      color: #667eea;
+      font-weight: 600;
+    }
+
+    .footer {
+      margin-top: 32px;
+      text-align: center;
+      color: #888;
+      font-size: 12px;
+    }
+
+    .server-info {
+      background: #f5f5f5;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 24px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .server-info strong {
+      color: #1a1a1a;
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 24px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .mode-card {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 Twitch Chat Overlay</h1>
+    <p class="subtitle">Escolha o modo de visualização</p>
+
+    <div class="modes">
+      <a href="/overlay.html" class="mode-card">
+        <div class="mode-icon">🖥️</div>
+        <div class="mode-title">Modo Overlay</div>
+        <div class="mode-description">
+          Interface limpa com fundo transparente, ideal para usar no OBS ou outro software de streaming.
+        </div>
+        <div class="mode-use-case">
+          → Para OBS Browser Source
+        </div>
+      </a>
+
+      <a href="/mobile.html" class="mode-card">
+        <div class="mode-icon">📱</div>
+        <div class="mode-title">Modo Mobile (IRL)</div>
+        <div class="mode-description">
+          Interface otimizada para visualização no celular durante lives IRL. Design claro e fácil de ler com conexões instáveis.
+        </div>
+        <div class="mode-use-case">
+          → Para ler no celular durante a live
+        </div>
+      </a>
+    </div>
+
+    <div class="server-info">
+      <strong>📡 Servidor:</strong> Certifique-se de que o servidor está rodando em <code>http://localhost:3000</code>
+    </div>
+
+    <div class="footer">
+      Sistema proprietário - Uso pessoal<br>
+      Read-only (apenas visualização)
+    </div>
+  </div>
+</body>
+</html>
