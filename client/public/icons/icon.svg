@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="url(#bgGradient)"/>
+
+  <!-- Chat bubbles icon -->
+  <!-- First bubble (bottom left) -->
+  <path d="M 140 340 C 140 320 160 300 180 300 L 260 300 C 280 300 300 320 300 340 L 300 380 C 300 400 280 420 260 420 L 200 420 L 170 450 L 170 420 L 180 420 C 160 420 140 400 140 380 Z"
+        fill="white" opacity="0.9"/>
+
+  <!-- Second bubble (top right) -->
+  <path d="M 220 140 C 220 120 240 100 260 100 L 380 100 C 400 100 420 120 420 140 L 420 200 C 420 220 400 240 380 240 L 300 240 L 300 270 L 270 240 L 260 240 C 240 240 220 220 220 200 Z"
+        fill="white" opacity="0.95"/>
+
+  <!-- Third bubble (middle) -->
+  <path d="M 180 200 C 180 180 200 160 220 160 L 320 160 C 340 160 360 180 360 200 L 360 260 C 360 280 340 300 320 300 L 240 300 L 210 330 L 210 300 L 220 300 C 200 300 180 280 180 260 Z"
+        fill="white"/>
+
+  <!-- Twitch-like accent lines -->
+  <rect x="240" y="190" width="8" height="30" rx="4" fill="#667eea"/>
+  <rect x="260" y="190" width="8" height="30" rx="4" fill="#667eea"/>
+  <rect x="280" y="190" width="8" height="20" rx="4" fill="#667eea"/>
+</svg>
