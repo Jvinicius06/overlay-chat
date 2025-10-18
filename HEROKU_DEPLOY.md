@@ -131,6 +131,55 @@ heroku logs --tail
 git push heroku main --force
 ```
 
+### Erro "Cannot find package 'fastify'"
+
+Se você receber o erro `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fastify'`, isso significa que as dependências não foram instaladas corretamente. Isso pode acontecer por alguns motivos:
+
+**Solução 1: Verificar se o heroku-postbuild foi executado**
+```bash
+# Verificar logs do build
+heroku logs --tail
+
+# Procurar por linhas como:
+# "Running heroku-postbuild"
+# "cd server && npm install"
+```
+
+**Solução 2: Forçar rebuild**
+```bash
+# Limpar cache do Heroku
+heroku repo:purge_cache -a sua-app
+
+# Fazer push novamente
+git commit --allow-empty -m "Rebuild"
+git push heroku main
+```
+
+**Solução 3: Verificar arquivos**
+Certifique-se de que os seguintes arquivos estão commitados no git:
+- `package.json` (raiz)
+- `Procfile` (raiz)
+- `server/package.json`
+- `client/package.json`
+
+```bash
+git status
+git add .
+git commit -m "Add missing files"
+git push heroku main
+```
+
+## Como funciona o build no Heroku
+
+O processo de deploy no Heroku segue esta ordem:
+
+1. **npm install** (na raiz): Instala dependências do package.json raiz (se houver)
+2. **heroku-postbuild**: Script customizado que:
+   - Instala dependências do servidor (`cd server && npm install`)
+   - Instala dependências do client (`cd client && npm install`)
+   - Faz build do client (`npm run build` - gera arquivos em `server/public/`)
+3. **npm start**: Inicia o servidor
+
 ## Notas importantes
 
 1. **Porta**: O Heroku define automaticamente a porta através da variável de ambiente `PORT`. O código já está configurado para usar essa variável.
@@ -142,6 +191,8 @@ git push heroku main --force
 4. **Dyno gratuito**: O Heroku oferece dynos gratuitos que "dormem" após 30 minutos de inatividade. Para aplicações em produção, considere usar um dyno pago.
 
 5. **HTTPS**: O Heroku fornece HTTPS automaticamente para todas as aplicações.
+
+6. **Build process**: O script `heroku-postbuild` garante que todas as dependências sejam instaladas corretamente antes de iniciar o servidor.
 
 ## Atualizar aplicação
 

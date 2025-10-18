@@ -4,12 +4,10 @@
   "description": "Twitch chat overlay system with multi-channel merge support for IRL streams",
   "type": "module",
   "scripts": {
-    "install:all": "npm install --prefix server && npm install --prefix client",
-    "build": "npm install --prefix client && npm run build --prefix client",
-    "start": "npm start --prefix server",
-    "postinstall": "npm run install:all && npm run build",
-    "dev:server": "npm run dev --prefix server",
-    "dev:client": "npm run dev --prefix client"
+    "start": "cd server && npm start",
+    "heroku-postbuild": "cd server && npm install && cd ../client && npm install && npm run build",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev"
   },
   "keywords": [
     "twitch",
