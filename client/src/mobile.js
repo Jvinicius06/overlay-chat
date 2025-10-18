@@ -1,9 +1,10 @@
 import { SSEClient } from './services/sseClient.js';
 import { MessageStore } from './utils/messageStore.js';
 import { createMobileMessage } from './utils/chatRenderer.js';
+import { config } from './config.js';
 import './styles/mobile.css';
 
-const SERVER_URL = 'http://localhost:3000';
+const SERVER_URL = config.apiUrl;
 const RENDER_BUFFER_SIZE = 200; // Number of messages to render at once for performance
 
 class MobileChat {

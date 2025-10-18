@@ -1,5 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { TwitchClient } from './twitch/client.js';
@@ -7,6 +10,9 @@ import { MergedCircularBuffer } from './buffer/mergedBuffer.js';
 import { SSEManager } from './api/sse.js';
 import { setupRoutes } from './api/routes.js';
 import { getChannelColor } from './merger/channelColors.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Main application
@@ -38,6 +44,14 @@ class OverlayChatServer {
     await this.fastify.register(cors, {
       origin: '*' // Allow all origins for proprietary use
     });
+
+    // Serve static files (built client) in production
+    const publicPath = join(__dirname, '..', 'public');
+    await this.fastify.register(fastifyStatic, {
+      root: publicPath,
+      prefix: '/'
+    });
+    logger.info(`Static files served from: ${publicPath}`);
 
     // Initialize message buffer
     this.messageBuffer = new MergedCircularBuffer(

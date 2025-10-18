@@ -1,9 +1,10 @@
 import { SSEClient } from './services/sseClient.js';
 import { MessageStore } from './utils/messageStore.js';
 import { createOverlayMessage } from './utils/chatRenderer.js';
+import { config } from './config.js';
 import './styles/overlay.css';
 
-const SERVER_URL = 'http://localhost:3000';
+const SERVER_URL = config.apiUrl;
 const MAX_MESSAGES = 20; // Show last 20 messages in overlay
 
 class OverlayChat {
