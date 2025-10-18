@@ -269,3 +269,16 @@ body.mobile-mode {
     transform: translateX(-50%) translateY(-10px);
   }
 }
+
+/* Hidden LivePix iframe for audio alerts */
+.livepix-hidden-iframe {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: none;
+  z-index: -1;
+}

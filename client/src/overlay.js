@@ -5,7 +5,7 @@ import { config } from './config.js';
 import './styles/overlay.css';
 
 const SERVER_URL = config.apiUrl;
-const MAX_MESSAGES = 20; // Show last 20 messages in overlay
+const MAX_MESSAGES = 50; // Show last 50 messages in overlay
 
 class OverlayChat {
   constructor() {
@@ -15,6 +15,7 @@ class OverlayChat {
     this.sseClient = null;
     this.isSyncing = false; // Track if currently syncing missed messages
     this.SEQUENCE_STORAGE_KEY = 'overlay_last_sequence'; // LocalStorage key
+    this.renderedMessageIds = new Set(); // Track which messages are already rendered
   }
 
   /**
@@ -201,37 +202,48 @@ class OverlayChat {
   }
 
   /**
-   * Render messages to the UI
+   * Render messages to the UI (incremental rendering)
    */
   renderMessages(messages) {
-    // Store current scroll position before rendering
-    const previousScrollHeight = this.container.scrollHeight;
-    const previousScrollTop = this.container.scrollTop;
+    // Get current message IDs in the DOM
+    const currentMessageIds = new Set(
+      Array.from(this.container.children).map(el => el.dataset.messageId)
+    );
 
-    // Clear container
-    this.container.innerHTML = '';
-
-    // Render each message
-    messages.forEach(message => {
-      const messageEl = createOverlayMessage(message);
-      this.container.appendChild(messageEl);
+    // Remove messages that are no longer in the list
+    const messageIds = new Set(messages.map(m => m.id));
+    Array.from(this.container.children).forEach(el => {
+      if (!messageIds.has(el.dataset.messageId)) {
+        el.remove();
+        this.renderedMessageIds.delete(el.dataset.messageId);
+      }
     });
 
-    // Calculate new dimensions
-    const newScrollHeight = this.container.scrollHeight;
-    const scrollDifference = newScrollHeight - previousScrollHeight;
+    // Add new messages
+    let hasNewMessages = false;
+    messages.forEach(message => {
+      if (!this.renderedMessageIds.has(message.id)) {
+        const messageEl = createOverlayMessage(message);
+        messageEl.dataset.messageId = message.id;
 
-    if (this.autoScroll) {
-      // Auto-scroll mode: stay at bottom (latest messages)
+        // Add animation class only to new messages
+        messageEl.classList.add('new-message-animation');
+
+        this.container.appendChild(messageEl);
+        this.renderedMessageIds.add(message.id);
+        hasNewMessages = true;
+
+        // Remove animation class after animation completes
+        setTimeout(() => {
+          messageEl.classList.remove('new-message-animation');
+        }, 500);
+      }
+    });
+
+    // Auto-scroll to bottom if needed
+    if (hasNewMessages) {
       this.scrollToLatestInstant();
-    } else {
-      // Manual mode: adjust scroll to keep same message visible
-      // This compensates both for new messages AND removed messages
-      this.container.scrollTop = previousScrollTop + scrollDifference;
     }
-
-    // Update button visibility after render
-    this.updateScrollButton();
   }
 
   /**

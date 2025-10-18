@@ -56,6 +56,13 @@ const config = {
   sse: {
     heartbeatInterval: parseInt(process.env.SSE_HEARTBEAT_INTERVAL || '15000', 10),
     retryMs: parseInt(process.env.SSE_RETRY_MS || '3000', 10)
+  },
+
+  livepix: {
+    urls: (process.env.LIVEPIX_URLS || '')
+      .split(',')
+      .map(u => u.trim())
+      .filter(Boolean)
   }
 };
 

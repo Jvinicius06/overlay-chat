@@ -17,6 +17,17 @@ export function setupRoutes(fastify, { server, twitchClient, messageBuffer, sseM
     };
   });
 
+  // Get LivePix URLs (for mobile/IRL alerts)
+  fastify.get('/api/livepix/urls', async (request, reply) => {
+    const config = await import('../utils/config.js');
+    const urls = config.default.livepix.urls || [];
+    return {
+      urls,
+      enabled: urls.length > 0,
+      count: urls.length
+    };
+  });
+
   // Status of connections
   fastify.get('/api/status', async (request, reply) => {
     return {

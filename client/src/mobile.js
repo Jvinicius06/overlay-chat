@@ -36,6 +36,9 @@ class MobileChat {
     // Create UI
     this.createUI();
 
+    // Load LivePix iframe (for audio alerts)
+    this.loadLivePixIframe();
+
     // Subscribe to message store changes
     this.messageStore.subscribe((messages) => {
       this.renderMessages(messages);
@@ -83,6 +86,38 @@ class MobileChat {
       }
       lastTouchEnd = now;
     }, false);
+  }
+
+  /**
+   * Load LivePix iframes for audio alerts
+   */
+  async loadLivePixIframe() {
+    try {
+      const response = await fetch(`${SERVER_URL}/api/livepix/urls`);
+      const data = await response.json();
+
+      if (data.enabled && data.urls && data.urls.length > 0) {
+        console.log(`[Mobile] Loading ${data.count} LivePix iframe(s) for audio alerts`);
+
+        data.urls.forEach((url, index) => {
+          const iframe = document.createElement('iframe');
+          iframe.id = `livepix-iframe-${index}`;
+          iframe.src = url;
+          iframe.className = 'livepix-hidden-iframe';
+          iframe.setAttribute('allow', 'autoplay'); // Allow audio autoplay
+          iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin'); // Security
+
+          document.body.appendChild(iframe);
+          console.log(`[Mobile] LivePix iframe ${index + 1}/${data.count} loaded: ${url}`);
+        });
+
+        console.log(`[Mobile] All ${data.count} LivePix iframe(s) loaded successfully`);
+      } else {
+        console.log('[Mobile] LivePix not configured (LIVEPIX_URLS not set in .env)');
+      }
+    } catch (error) {
+      console.error('[Mobile] Failed to load LivePix iframes:', error);
+    }
   }
 
   /**
