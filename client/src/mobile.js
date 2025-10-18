@@ -99,13 +99,21 @@ class MobileChat {
       if (data.enabled && data.urls && data.urls.length > 0) {
         console.log(`[Mobile] Loading ${data.count} LivePix iframe(s) for audio alerts`);
 
+        // Create audio unlock button (required for mobile browsers)
+        this.createAudioUnlockButton();
+
         data.urls.forEach((url, index) => {
           const iframe = document.createElement('iframe');
           iframe.id = `livepix-iframe-${index}`;
           iframe.src = url;
           iframe.className = 'livepix-hidden-iframe';
-          iframe.setAttribute('allow', 'autoplay'); // Allow audio autoplay
-          iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin'); // Security
+          // Allow autoplay for audio - required for mobile browsers
+          iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
+          // Sandbox with necessary permissions
+          iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation');
+          // Additional mobile-specific attributes
+          iframe.setAttribute('loading', 'eager');
+          iframe.setAttribute('allowfullscreen', '');
 
           document.body.appendChild(iframe);
           console.log(`[Mobile] LivePix iframe ${index + 1}/${data.count} loaded: ${url}`);
@@ -118,6 +126,48 @@ class MobileChat {
     } catch (error) {
       console.error('[Mobile] Failed to load LivePix iframes:', error);
     }
+  }
+
+  /**
+   * Create audio unlock button for mobile browsers
+   * Mobile browsers require user interaction before playing audio
+   */
+  createAudioUnlockButton() {
+    const button = document.createElement('button');
+    button.className = 'audio-unlock-button';
+    button.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+      </svg>
+      <span>Toque para ativar áudio</span>
+    `;
+
+    button.addEventListener('click', () => {
+      // Try to interact with iframes to unlock audio
+      const iframes = document.querySelectorAll('.livepix-hidden-iframe');
+      iframes.forEach(iframe => {
+        try {
+          // Trigger a click event in the iframe to unlock audio
+          if (iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: 'user-interaction' }, '*');
+          }
+        } catch (e) {
+          console.log('[Mobile] Cannot access iframe:', e);
+        }
+      });
+
+      // Hide the button after first interaction
+      button.classList.add('unlocked');
+      setTimeout(() => {
+        button.remove();
+      }, 300);
+
+      console.log('[Mobile] Audio unlocked by user interaction');
+    });
+
+    document.body.appendChild(button);
   }
 
   /**
