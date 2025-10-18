@@ -107,16 +107,24 @@ class MobileChat {
           iframe.id = `livepix-iframe-${index}`;
           iframe.src = url;
           iframe.className = 'livepix-hidden-iframe';
-          // Allow autoplay for audio - required for mobile browsers
-          iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
-          // Sandbox with necessary permissions
-          iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation');
+
+          // Allow permissions for audio, video, and WebSocket connections
+          iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; microphone; camera; encrypted-media');
+
+          // Remove sandbox to allow full WebSocket functionality
+          // Sandbox blocks WebSocket connections - we need full access for LivePix
+          // iframe.setAttribute('sandbox', '...'); // REMOVED - blocks WebSocket
+
           // Additional mobile-specific attributes
           iframe.setAttribute('loading', 'eager');
           iframe.setAttribute('allowfullscreen', '');
+          iframe.setAttribute('allowtransparency', 'true');
+
+          // Set referrer policy for better compatibility
+          iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
 
           document.body.appendChild(iframe);
-          console.log(`[Mobile] LivePix iframe ${index + 1}/${data.count} loaded: ${url}`);
+          console.log(`[Mobile] LivePix iframe ${index + 1}/${data.count} loaded (WebSocket enabled): ${url}`);
         });
 
         console.log(`[Mobile] All ${data.count} LivePix iframe(s) loaded successfully`);
@@ -145,17 +153,42 @@ class MobileChat {
     `;
 
     button.addEventListener('click', () => {
-      // Try to interact with iframes to unlock audio
+      console.log('[Mobile] User clicked audio unlock button');
+
+      // Get all LivePix iframes
       const iframes = document.querySelectorAll('.livepix-hidden-iframe');
-      iframes.forEach(iframe => {
+
+      iframes.forEach((iframe, index) => {
         try {
-          // Trigger a click event in the iframe to unlock audio
+          // Store the original src
+          const originalSrc = iframe.src;
+
+          // Method 1: Try to post message to iframe
           if (iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: 'user-interaction' }, '*');
+            iframe.contentWindow.postMessage({ type: 'user-interaction', action: 'play' }, '*');
+            console.log(`[Mobile] Posted message to iframe ${index}`);
           }
+
+          // Method 2: Reload iframe to trigger WebSocket connection after user interaction
+          // This ensures the iframe loads with audio unlocked
+          iframe.src = '';
+          setTimeout(() => {
+            iframe.src = originalSrc;
+            console.log(`[Mobile] Reloaded iframe ${index} with audio unlocked`);
+          }, 100);
+
         } catch (e) {
-          console.log('[Mobile] Cannot access iframe:', e);
+          console.log(`[Mobile] Error unlocking iframe ${index}:`, e);
         }
+      });
+
+      // Create a silent audio element and play it to unlock audio context
+      // This is required on iOS/Safari
+      const silentAudio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAhgCmLqAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZDwP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV');
+      silentAudio.play().then(() => {
+        console.log('[Mobile] Silent audio played - audio context unlocked');
+      }).catch(e => {
+        console.log('[Mobile] Could not play silent audio:', e);
       });
 
       // Hide the button after first interaction
@@ -164,7 +197,7 @@ class MobileChat {
         button.remove();
       }, 300);
 
-      console.log('[Mobile] Audio unlocked by user interaction');
+      console.log('[Mobile] Audio unlock process completed');
     });
 
     document.body.appendChild(button);
