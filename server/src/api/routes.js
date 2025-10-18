@@ -6,7 +6,7 @@ import { getChannelColor } from '../merger/channelColors.js';
  * @param {Object} fastify - Fastify instance
  * @param {Object} deps - Dependencies (twitchClient, messageBuffer, sseManager, etc)
  */
-export function setupRoutes(fastify, { twitchClient, messageBuffer, sseManager, channelColors }) {
+export function setupRoutes(fastify, { server, twitchClient, messageBuffer, sseManager, channelColors }) {
 
   // Health check
   fastify.get('/api/health', async (request, reply) => {
@@ -156,6 +156,59 @@ export function setupRoutes(fastify, { twitchClient, messageBuffer, sseManager, 
     });
 
     return { colors: colorMap };
+  });
+
+  // Sync endpoint - Get missed messages by sequence number
+  fastify.get('/api/messages/sync', async (request, reply) => {
+    const { lastSequence } = request.query;
+
+    if (!lastSequence) {
+      return reply.code(400).send({ error: 'lastSequence parameter is required' });
+    }
+
+    const lastSeq = parseInt(lastSequence, 10);
+    if (isNaN(lastSeq)) {
+      return reply.code(400).send({ error: 'lastSequence must be a valid number' });
+    }
+
+    const missedMessages = messageBuffer.getAfterSequence(lastSeq);
+    const currentSequence = server ? server.getCurrentSequence() : messageBuffer.getCurrentSequence();
+
+    return {
+      currentSequence,
+      lastSequence: lastSeq,
+      missedCount: missedMessages.length,
+      messages: missedMessages
+    };
+  });
+
+  // Get messages by sequence range
+  fastify.get('/api/messages/range', async (request, reply) => {
+    const { from, to } = request.query;
+
+    if (!from || !to) {
+      return reply.code(400).send({ error: 'from and to parameters are required' });
+    }
+
+    const fromSeq = parseInt(from, 10);
+    const toSeq = parseInt(to, 10);
+
+    if (isNaN(fromSeq) || isNaN(toSeq)) {
+      return reply.code(400).send({ error: 'from and to must be valid numbers' });
+    }
+
+    if (fromSeq > toSeq) {
+      return reply.code(400).send({ error: 'from must be less than or equal to to' });
+    }
+
+    const messages = messageBuffer.getBySequenceRange(fromSeq, toSeq);
+
+    return {
+      from: fromSeq,
+      to: toSeq,
+      count: messages.length,
+      messages
+    };
   });
 
   logger.info('API routes registered');

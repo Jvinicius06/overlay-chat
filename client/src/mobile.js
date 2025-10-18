@@ -20,6 +20,8 @@ class MobileChat {
     this.activeChannels = [];
     this.renderedMessageIds = new Set(); // Track which messages are already rendered
     this.lastScrollTop = 0; // Track last scroll position to detect manual scrolling
+    this.isSyncing = false; // Track if currently syncing missed messages
+    this.SEQUENCE_STORAGE_KEY = 'mobile_last_sequence'; // LocalStorage key
   }
 
   /**
@@ -145,10 +147,19 @@ class MobileChat {
    * Connect to SSE stream
    */
   connectSSE() {
+    // Load last sequence from localStorage
+    const storedSequence = localStorage.getItem(this.SEQUENCE_STORAGE_KEY);
+    const lastSequence = storedSequence ? parseInt(storedSequence, 10) : null;
+
     this.sseClient = new SSEClient(`${SERVER_URL}/api/chat/stream`, {
       onMessage: (message) => {
         console.log('[Mobile] Message received:', message);
         this.messageStore.addMessage(message);
+
+        // Save sequence to localStorage
+        if (message.sequence !== undefined) {
+          localStorage.setItem(this.SEQUENCE_STORAGE_KEY, message.sequence.toString());
+        }
         // Auto-scroll is handled in renderMessages()
       },
 
@@ -172,10 +183,73 @@ class MobileChat {
       onError: (error) => {
         console.error('[Mobile] Error:', error);
         this.updateStatus('disconnected');
+      },
+
+      onGapDetected: (lastSeq, currentSeq) => {
+        console.warn('[Mobile] Gap detected:', lastSeq, '->', currentSeq);
+        this.handleGapDetected(lastSeq, currentSeq);
       }
     });
 
+    // Set last sequence if we have one from storage
+    if (lastSequence !== null) {
+      this.sseClient.setLastSequence(lastSequence);
+      console.log('[Mobile] Loaded last sequence from storage:', lastSequence);
+    }
+
     this.sseClient.connect();
+  }
+
+  /**
+   * Handle gap detection - fetch missed messages
+   */
+  async handleGapDetected(lastSeq, currentSeq) {
+    if (this.isSyncing) {
+      console.log('[Mobile] Already syncing, skipping duplicate gap recovery');
+      return;
+    }
+
+    this.isSyncing = true;
+    this.updateStatus('reconnecting'); // Show syncing status
+
+    try {
+      const missingCount = currentSeq - lastSeq - 1;
+      console.log(`[Mobile] Fetching ${missingCount} missed messages (${lastSeq + 1} to ${currentSeq - 1})`);
+
+      const response = await fetch(`${SERVER_URL}/api/messages/sync?lastSequence=${lastSeq}`);
+      const data = await response.json();
+
+      if (data.messages && data.messages.length > 0) {
+        console.log(`[Mobile] Recovered ${data.messages.length} missed messages`);
+        this.messageStore.addMessages(data.messages);
+
+        // Show notification to user
+        this.showSyncNotification(data.messages.length);
+      } else {
+        console.log('[Mobile] No missed messages to recover');
+      }
+    } catch (error) {
+      console.error('[Mobile] Error fetching missed messages:', error);
+    } finally {
+      this.isSyncing = false;
+      this.updateStatus('connected');
+    }
+  }
+
+  /**
+   * Show sync notification to user
+   */
+  showSyncNotification(count) {
+    const notification = document.createElement('div');
+    notification.className = 'sync-notification';
+    notification.textContent = `✓ Recovered ${count} missed message${count > 1 ? 's' : ''}`;
+    document.body.appendChild(notification);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      notification.classList.add('fade-out');
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
   }
 
   /**

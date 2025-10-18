@@ -13,6 +13,8 @@ class OverlayChat {
     this.container = null;
     this.statusEl = null;
     this.sseClient = null;
+    this.isSyncing = false; // Track if currently syncing missed messages
+    this.SEQUENCE_STORAGE_KEY = 'overlay_last_sequence'; // LocalStorage key
   }
 
   /**
@@ -92,10 +94,19 @@ class OverlayChat {
    * Connect to SSE stream
    */
   connectSSE() {
+    // Load last sequence from localStorage
+    const storedSequence = localStorage.getItem(this.SEQUENCE_STORAGE_KEY);
+    const lastSequence = storedSequence ? parseInt(storedSequence, 10) : null;
+
     this.sseClient = new SSEClient(`${SERVER_URL}/api/chat/stream`, {
       onMessage: (message) => {
         console.log('[Overlay] Message received:', message);
         this.messageStore.addMessage(message);
+
+        // Save sequence to localStorage
+        if (message.sequence !== undefined) {
+          localStorage.setItem(this.SEQUENCE_STORAGE_KEY, message.sequence.toString());
+        }
         // Auto-scroll is handled in renderMessages()
       },
 
@@ -116,10 +127,54 @@ class OverlayChat {
       onError: (error) => {
         console.error('[Overlay] Error:', error);
         this.updateStatus('disconnected');
+      },
+
+      onGapDetected: (lastSeq, currentSeq) => {
+        console.warn('[Overlay] Gap detected:', lastSeq, '->', currentSeq);
+        this.handleGapDetected(lastSeq, currentSeq);
       }
     });
 
+    // Set last sequence if we have one from storage
+    if (lastSequence !== null) {
+      this.sseClient.setLastSequence(lastSequence);
+      console.log('[Overlay] Loaded last sequence from storage:', lastSequence);
+    }
+
     this.sseClient.connect();
+  }
+
+  /**
+   * Handle gap detection - fetch missed messages
+   */
+  async handleGapDetected(lastSeq, currentSeq) {
+    if (this.isSyncing) {
+      console.log('[Overlay] Already syncing, skipping duplicate gap recovery');
+      return;
+    }
+
+    this.isSyncing = true;
+    this.updateStatus('reconnecting'); // Show syncing status
+
+    try {
+      const missingCount = currentSeq - lastSeq - 1;
+      console.log(`[Overlay] Fetching ${missingCount} missed messages (${lastSeq + 1} to ${currentSeq - 1})`);
+
+      const response = await fetch(`${SERVER_URL}/api/messages/sync?lastSequence=${lastSeq}`);
+      const data = await response.json();
+
+      if (data.messages && data.messages.length > 0) {
+        console.log(`[Overlay] Recovered ${data.messages.length} missed messages`);
+        this.messageStore.addMessages(data.messages);
+      } else {
+        console.log('[Overlay] No missed messages to recover');
+      }
+    } catch (error) {
+      console.error('[Overlay] Error fetching missed messages:', error);
+    } finally {
+      this.isSyncing = false;
+      this.updateStatus('connected');
+    }
   }
 
   /**

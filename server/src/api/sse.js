@@ -4,9 +4,10 @@ import logger from '../utils/logger.js';
  * SSE Client Manager
  */
 export class SSEManager {
-  constructor(messageBuffer, config) {
+  constructor(messageBuffer, config, server = null) {
     this.messageBuffer = messageBuffer;
     this.config = config;
+    this.server = server; // Reference to main server for accessing current sequence
     this.clients = new Set();
   }
 
@@ -16,12 +17,13 @@ export class SSEManager {
    * @param {Object} reply - Fastify reply
    */
   async handleConnection(request, reply) {
-    const { channels, exclude, lastEventId } = request.query;
+    const { channels, exclude, lastEventId, lastSequence } = request.query;
 
     logger.info({
       channels,
       exclude,
       lastEventId,
+      lastSequence,
       ip: request.ip
     }, 'New SSE client connected');
 
@@ -40,6 +42,7 @@ export class SSEManager {
       channels: channels ? channels.split(',').map(c => c.trim().toLowerCase()) : null,
       exclude: exclude ? exclude.split(',').map(c => c.trim().toLowerCase()) : null,
       lastEventId: lastEventId || null,
+      lastSequence: lastSequence ? parseInt(lastSequence, 10) : null,
       connected: true
     };
 
@@ -48,8 +51,8 @@ export class SSEManager {
     // Send retry interval
     reply.raw.write(`retry: ${this.config.sse.retryMs}\n\n`);
 
-    // Send missed messages if lastEventId is provided
-    if (lastEventId) {
+    // Send missed messages if lastSequence or lastEventId is provided
+    if (client.lastSequence || lastEventId) {
       this.sendMissedMessages(client);
     }
 
@@ -85,7 +88,25 @@ export class SSEManager {
    */
   sendMissedMessages(client) {
     try {
-      const missedMessages = this.messageBuffer.getAfterId(client.lastEventId);
+      let missedMessages = [];
+
+      // Prefer sequence-based recovery over ID-based
+      if (client.lastSequence !== null && !isNaN(client.lastSequence)) {
+        missedMessages = this.messageBuffer.getAfterSequence(client.lastSequence);
+        logger.info({
+          clientId: client.id,
+          lastSequence: client.lastSequence,
+          count: missedMessages.length
+        }, 'Recovering messages by sequence number');
+      } else if (client.lastEventId) {
+        missedMessages = this.messageBuffer.getAfterId(client.lastEventId);
+        logger.info({
+          clientId: client.id,
+          lastEventId: client.lastEventId,
+          count: missedMessages.length
+        }, 'Recovering messages by event ID');
+      }
+
       const filteredMessages = this.filterMessages(missedMessages, client);
 
       logger.info({
@@ -174,9 +195,11 @@ export class SSEManager {
     if (!client.connected) return;
 
     try {
+      const currentSequence = this.server ? this.server.getCurrentSequence() : this.messageBuffer.getCurrentSequence();
       const data = JSON.stringify({
         timestamp: Date.now(),
-        activeChannels: Array.from(this.messageBuffer.channelIndex.keys())
+        activeChannels: Array.from(this.messageBuffer.channelIndex.keys()),
+        currentSequence
       });
 
       client.reply.raw.write(`event: heartbeat\n`);

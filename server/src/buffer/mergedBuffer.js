@@ -130,6 +130,37 @@ export class MergedCircularBuffer {
   }
 
   /**
+   * Get messages after a specific sequence number
+   * @param {number} sequence - Last sequence number
+   * @returns {Array}
+   */
+  getAfterSequence(sequence) {
+    if (!sequence || isNaN(sequence)) return this.getAll();
+    return this.messages.filter(msg => msg.sequence > sequence);
+  }
+
+  /**
+   * Get messages within a sequence range (inclusive)
+   * @param {number} fromSeq - Start sequence (inclusive)
+   * @param {number} toSeq - End sequence (inclusive)
+   * @returns {Array}
+   */
+  getBySequenceRange(fromSeq, toSeq) {
+    if (isNaN(fromSeq) || isNaN(toSeq)) return [];
+    return this.messages.filter(msg => msg.sequence >= fromSeq && msg.sequence <= toSeq);
+  }
+
+  /**
+   * Get current sequence number (highest in buffer)
+   * @returns {number}
+   */
+  getCurrentSequence() {
+    if (this.messages.length === 0) return 0;
+    // Get the highest sequence number in the buffer
+    return Math.max(...this.messages.map(msg => msg.sequence || 0));
+  }
+
+  /**
    * Get filtered messages by channel list
    * @param {string[]} channels - Array of channel names to include
    * @returns {Array}
@@ -165,6 +196,7 @@ export class MergedCircularBuffer {
     const stats = {
       totalMessages: this.messages.length,
       maxSize: this.maxSize,
+      currentSequence: this.getCurrentSequence(),
       channels: {}
     };
 

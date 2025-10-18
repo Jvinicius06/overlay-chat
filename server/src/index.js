@@ -24,6 +24,7 @@ class OverlayChatServer {
     this.messageBuffer = null;
     this.sseManager = null;
     this.channelColors = new Map();
+    this.messageSequence = 0; // Global sequence counter for message synchronization
   }
 
   /**
@@ -61,7 +62,7 @@ class OverlayChatServer {
     logger.info('Message buffer initialized');
 
     // Initialize SSE manager
-    this.sseManager = new SSEManager(this.messageBuffer, config);
+    this.sseManager = new SSEManager(this.messageBuffer, config, this);
     logger.info('SSE manager initialized');
 
     // Initialize channel colors
@@ -92,6 +93,7 @@ class OverlayChatServer {
 
     // Setup API routes
     setupRoutes(this.fastify, {
+      server: this,
       twitchClient: this.twitchClient,
       messageBuffer: this.messageBuffer,
       sseManager: this.sseManager,
@@ -116,12 +118,16 @@ class OverlayChatServer {
    * @param {Object} message - Parsed Twitch message
    */
   handleTwitchMessage(message) {
+    // Increment global sequence counter
+    this.messageSequence++;
+
     // Get channel color
     const channelColor = this.channelColors.get(message.channel) || getChannelColor(message.channel);
 
-    // Create unified message object with ID
+    // Create unified message object with ID and sequence
     const unifiedMessage = {
       id: `${message.timestamp}-${message.channel}-${this.generateRandomId()}`,
+      sequence: this.messageSequence,
       channel: message.channel,
       channelColor,
       ...message
@@ -136,7 +142,8 @@ class OverlayChatServer {
     logger.debug({
       channel: message.channel,
       user: message.username,
-      message: message.message
+      message: message.message,
+      sequence: this.messageSequence
     }, 'Message processed');
   }
 
@@ -146,6 +153,14 @@ class OverlayChatServer {
    */
   generateRandomId() {
     return Math.random().toString(36).substr(2, 9);
+  }
+
+  /**
+   * Get current message sequence number
+   * @returns {number}
+   */
+  getCurrentSequence() {
+    return this.messageSequence;
   }
 
   /**
