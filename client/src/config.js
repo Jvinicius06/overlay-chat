@@ -3,15 +3,17 @@
  * Determines API URL based on environment
  */
 
-// In development mode (vite dev), use localhost:3000
-// In production mode (vite build), use relative /api paths
+// In development mode (vite dev), proxy redirects /api to localhost:3000
+// In production mode (vite build), use relative /api paths (same server)
 const getApiUrl = () => {
-  if (import.meta.env.MODE === 'development') {
-    return 'http://localhost:3000';
-  }
+  // Always use relative paths - proxy handles dev mode redirection
   return ''; // Empty string means use relative paths like /api/...
 };
 
 export const config = {
-  apiUrl: getApiUrl()
+  apiUrl: getApiUrl(),
+
+  // Environment info
+  isDev: import.meta.env.MODE === 'development',
+  mode: import.meta.env.MODE
 };

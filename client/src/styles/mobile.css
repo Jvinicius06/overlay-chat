@@ -270,17 +270,102 @@ body.mobile-mode {
   }
 }
 
-/* Hidden LivePix iframe for audio alerts */
-.livepix-hidden-iframe {
+/* Floating LivePix container - visible but non-blocking */
+.livepix-floating-container {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+  bottom: 80px;
+  right: 10px;
+  width: 300px;
+  max-width: calc(100vw - 20px);
+  max-height: 250px;
+  border: 2px solid #667eea;
+  border-radius: 12px;
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  transition: all 0.3s;
+  overflow: hidden;
+}
+
+.livepix-floating-container.minimized {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+}
+
+.livepix-floating-container.hidden {
+  display: none;
+}
+
+.livepix-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  user-select: none;
+  pointer-events: auto; /* Header can be touched */
+}
+
+.livepix-header-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.livepix-controls {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto; /* Buttons can be touched */
+}
+
+.livepix-btn {
+  background: rgba(255, 255, 255, 0.2);
   border: none;
-  z-index: -1;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.livepix-btn:active {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(0.9);
+}
+
+.livepix-iframe-wrapper {
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+  pointer-events: none; /* Iframe doesn't block interaction */
+}
+
+.livepix-floating-container.minimized .livepix-iframe-wrapper {
+  display: none;
+}
+
+.livepix-floating-container.minimized .livepix-header-title span {
+  display: none;
+}
+
+.livepix-floating-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  background: #000;
+  pointer-events: none; /* Pass through touches to chat below */
 }
 
 /* Audio unlock button - Required for mobile autoplay */

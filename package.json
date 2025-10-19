@@ -7,7 +7,9 @@
     "start": "npm run heroku-postbuild && cd server && npm start",
     "heroku-postbuild": "cd server && npm install && cd ../client && npm install && npm run build",
     "dev:server": "cd server && npm run dev",
-    "dev:client": "cd client && npm run dev"
+    "dev:client": "cd client && npm run dev",
+    "dev": "echo '🚀 Inicie em 2 terminais:\n  Terminal 1: npm run dev:server\n  Terminal 2: npm run dev:client'",
+    "build": "cd client && npm run build"
   },
   "keywords": [
     "twitch",

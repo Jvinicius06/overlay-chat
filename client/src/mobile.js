@@ -102,30 +102,8 @@ class MobileChat {
         // Create audio unlock button (required for mobile browsers)
         this.createAudioUnlockButton();
 
-        data.urls.forEach((url, index) => {
-          const iframe = document.createElement('iframe');
-          iframe.id = `livepix-iframe-${index}`;
-          iframe.src = url;
-          iframe.className = 'livepix-hidden-iframe';
-
-          // Allow permissions for audio, video, and WebSocket connections
-          iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; microphone; camera; encrypted-media');
-
-          // Remove sandbox to allow full WebSocket functionality
-          // Sandbox blocks WebSocket connections - we need full access for LivePix
-          // iframe.setAttribute('sandbox', '...'); // REMOVED - blocks WebSocket
-
-          // Additional mobile-specific attributes
-          iframe.setAttribute('loading', 'eager');
-          iframe.setAttribute('allowfullscreen', '');
-          iframe.setAttribute('allowtransparency', 'true');
-
-          // Set referrer policy for better compatibility
-          iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
-
-          document.body.appendChild(iframe);
-          console.log(`[Mobile] LivePix iframe ${index + 1}/${data.count} loaded (WebSocket enabled): ${url}`);
-        });
+        // Create floating container for LivePix
+        this.createLivePixFloatingContainer(data.urls);
 
         console.log(`[Mobile] All ${data.count} LivePix iframe(s) loaded successfully`);
       } else {
@@ -133,6 +111,118 @@ class MobileChat {
       }
     } catch (error) {
       console.error('[Mobile] Failed to load LivePix iframes:', error);
+    }
+  }
+
+  /**
+   * Create floating container for LivePix iframes
+   */
+  createLivePixFloatingContainer(urls) {
+    const container = document.createElement('div');
+    container.className = 'livepix-floating-container';
+    container.id = 'livepix-container';
+
+    // Header with controls
+    const header = document.createElement('div');
+    header.className = 'livepix-header';
+    header.innerHTML = `
+      <div class="livepix-header-title">
+        <span>📺</span>
+        <span>LivePix (${urls.length})</span>
+      </div>
+      <div class="livepix-controls">
+        <button class="livepix-btn" onclick="window.toggleLivePixContainer()" title="Minimize">_</button>
+        <button class="livepix-btn" onclick="window.closeLivePixContainer()" title="Close">×</button>
+      </div>
+    `;
+    container.appendChild(header);
+
+    // Iframe wrapper
+    const iframeWrapper = document.createElement('div');
+    iframeWrapper.className = 'livepix-iframe-wrapper';
+
+    // Add all LivePix iframes with full permissions for Safari iOS
+    urls.forEach((url, index) => {
+      const iframe = document.createElement('iframe');
+      iframe.className = 'livepix-floating-iframe';
+      iframe.src = url;
+
+      // Full permissions for Safari iOS - Allow all features
+      iframe.allow = 'autoplay; camera; microphone; geolocation; payment; fullscreen; picture-in-picture; accelerometer; gyroscope; magnetometer; clipboard-read; clipboard-write; display-capture; encrypted-media; midi; screen-wake-lock; usb; web-share; xr-spatial-tracking';
+
+      // Additional attributes for Safari iOS compatibility
+      iframe.setAttribute('allowfullscreen', 'true');
+      iframe.setAttribute('allowpaymentrequest', 'true');
+      iframe.setAttribute('loading', 'eager');
+      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+      iframe.setAttribute('credentialless', 'false'); // Ensure credentials are sent
+      iframe.crossOrigin = 'use-credentials'; // Send cookies with iframe request
+
+      // IMPORTANT: NO sandbox attribute - it would block everything!
+
+      iframe.style.display = index === 0 ? 'block' : 'none'; // Only show first one
+      iframeWrapper.appendChild(iframe);
+      console.log(`[Mobile] LivePix iframe ${index + 1} added with full iOS permissions:`, url);
+    });
+
+    container.appendChild(iframeWrapper);
+
+    // Make header draggable
+    this.makeElementDraggable(container, header);
+
+    document.body.appendChild(container);
+    console.log('[Mobile] Floating LivePix container created');
+  }
+
+  /**
+   * Make an element draggable by a handle
+   */
+  makeElementDraggable(element, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    let isDragging = false;
+
+    handle.addEventListener('touchstart', dragStart, { passive: false });
+    handle.addEventListener('touchmove', dragMove, { passive: false });
+    handle.addEventListener('touchend', dragEnd, { passive: false });
+
+    function dragStart(e) {
+      isDragging = true;
+      e.preventDefault();
+
+      const touch = e.touches[0];
+      pos3 = touch.clientX;
+      pos4 = touch.clientY;
+    }
+
+    function dragMove(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+
+      const touch = e.touches[0];
+      pos1 = pos3 - touch.clientX;
+      pos2 = pos4 - touch.clientY;
+      pos3 = touch.clientX;
+      pos4 = touch.clientY;
+
+      // Get current position
+      const rect = element.getBoundingClientRect();
+      let newTop = rect.top - pos2;
+      let newLeft = rect.left - pos1;
+
+      // Constrain to viewport
+      const maxX = window.innerWidth - rect.width;
+      const maxY = window.innerHeight - rect.height;
+      newLeft = Math.max(0, Math.min(newLeft, maxX));
+      newTop = Math.max(0, Math.min(newTop, maxY));
+
+      element.style.top = newTop + 'px';
+      element.style.left = newLeft + 'px';
+      element.style.right = 'auto';
+      element.style.bottom = 'auto';
+    }
+
+    function dragEnd(e) {
+      isDragging = false;
     }
   }
 
@@ -152,11 +242,24 @@ class MobileChat {
       <span>Toque para ativar áudio</span>
     `;
 
-    button.addEventListener('click', () => {
+    button.addEventListener('click', async () => {
       console.log('[Mobile] User clicked audio unlock button');
 
-      // Get all LivePix iframes
-      const iframes = document.querySelectorAll('.livepix-hidden-iframe');
+      // Safari iOS: Request Storage Access API for cookies/localStorage in iframes
+      // This is CRITICAL for Safari iOS 13.4+ which blocks third-party cookies by default
+      if (document.requestStorageAccess) {
+        try {
+          await document.requestStorageAccess();
+          console.log('[Mobile] ✅ Storage access granted (cookies/localStorage enabled for iframes)');
+        } catch (e) {
+          console.log('[Mobile] ⚠️ Storage access denied or not needed:', e.message);
+        }
+      } else {
+        console.log('[Mobile] Storage Access API not supported (may not be needed)');
+      }
+
+      // Get all LivePix iframes (now in floating container)
+      const iframes = document.querySelectorAll('.livepix-floating-iframe');
 
       iframes.forEach((iframe, index) => {
         try {
@@ -170,11 +273,11 @@ class MobileChat {
           }
 
           // Method 2: Reload iframe to trigger WebSocket connection after user interaction
-          // This ensures the iframe loads with audio unlocked
+          // This ensures the iframe loads with audio unlocked AND storage access granted
           iframe.src = '';
           setTimeout(() => {
             iframe.src = originalSrc;
-            console.log(`[Mobile] Reloaded iframe ${index} with audio unlocked`);
+            console.log(`[Mobile] Reloaded iframe ${index} with audio + storage access`);
           }, 100);
 
         } catch (e) {
@@ -554,6 +657,23 @@ class MobileChat {
     this.lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
   }
 }
+
+// Global functions for LivePix container controls
+window.toggleLivePixContainer = function() {
+  const container = document.getElementById('livepix-container');
+  if (container) {
+    container.classList.toggle('minimized');
+    console.log('[Mobile] LivePix container toggled');
+  }
+};
+
+window.closeLivePixContainer = function() {
+  const container = document.getElementById('livepix-container');
+  if (container) {
+    container.classList.add('hidden');
+    console.log('[Mobile] LivePix container closed');
+  }
+};
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {

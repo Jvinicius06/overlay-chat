@@ -4,7 +4,23 @@ import { resolve } from 'path';
 export default defineConfig({
   server: {
     port: 5173,
-    host: true
+    host: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+        ws: true, // Proxy WebSocket connections
+      },
+      '/manifest.json': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/icons': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
+    }
   },
   build: {
     outDir: '../server/public',

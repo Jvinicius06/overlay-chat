@@ -158,6 +158,12 @@ window.loadLivePixIframe = async function() {
     logInfo(`───────────────────────────────────────`);
     logInfo(`📦 Criando iframe ${index + 1}/${livePixUrls.length}`);
 
+    // Add label for this iframe
+    const label = document.createElement('div');
+    label.className = 'iframe-label';
+    label.textContent = `Iframe ${index + 1}: ${url.substring(0, 50)}${url.length > 50 ? '...' : ''}`;
+    container.appendChild(label);
+
     const iframe = document.createElement('iframe');
     iframe.id = `livepix-test-${index}`;
     iframe.src = url;
@@ -292,3 +298,77 @@ document.addEventListener('visibilitychange', () => {
     logInfo('👁️ Página visível');
   }
 });
+
+// Toggle iframe container minimize/maximize
+window.toggleIframeContainer = function() {
+  const container = document.getElementById('iframeContainer');
+  container.classList.toggle('minimized');
+
+  if (container.classList.contains('minimized')) {
+    logInfo('📦 Iframes minimizados');
+  } else {
+    logInfo('📦 Iframes maximizados');
+  }
+};
+
+// Close iframe container
+window.closeIframeContainer = function() {
+  const container = document.getElementById('iframeContainer');
+  container.style.display = 'none';
+  logInfo('✕ Container de iframes fechado');
+};
+
+// Make element draggable
+function makeDraggable(element, handle) {
+  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+  handle.onmousedown = dragMouseDown;
+  handle.ontouchstart = dragTouchStart;
+
+  function dragMouseDown(e) {
+    e.preventDefault();
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    document.onmouseup = closeDragElement;
+    document.onmousemove = elementDrag;
+  }
+
+  function dragTouchStart(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    pos3 = touch.clientX;
+    pos4 = touch.clientY;
+    document.ontouchend = closeDragElement;
+    document.ontouchmove = elementDragTouch;
+  }
+
+  function elementDrag(e) {
+    e.preventDefault();
+    pos1 = pos3 - e.clientX;
+    pos2 = pos4 - e.clientY;
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    element.style.top = (element.offsetTop - pos2) + "px";
+    element.style.left = (element.offsetLeft - pos1) + "px";
+    element.style.right = "auto";
+  }
+
+  function elementDragTouch(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    pos1 = pos3 - touch.clientX;
+    pos2 = pos4 - touch.clientY;
+    pos3 = touch.clientX;
+    pos4 = touch.clientY;
+    element.style.top = (element.offsetTop - pos2) + "px";
+    element.style.left = (element.offsetLeft - pos1) + "px";
+    element.style.right = "auto";
+  }
+
+  function closeDragElement() {
+    document.onmouseup = null;
+    document.onmousemove = null;
+    document.ontouchend = null;
+    document.ontouchmove = null;
+  }
+}
