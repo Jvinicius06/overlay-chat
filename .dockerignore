@@ -1,0 +1,35 @@
+# Node modules
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# Built files (will be rebuilt in container)
+server/public/
+client/dist/
+
+# Development files
+.git/
+.gitignore
+.env.example
+*.md
+!README.md
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.js
+__tests__/
+
+# Documentation
+docs/

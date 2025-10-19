@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  overlay-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      # Twitch channels (comma-separated)
+      - TWITCH_CHANNELS=${TWITCH_CHANNELS:-sacy,aspas}
+      # LivePix URLs (comma-separated)
+      - LIVEPIX_URLS=${LIVEPIX_URLS:-}
+      # Message buffer settings
+      - MESSAGE_BUFFER_SIZE=${MESSAGE_BUFFER_SIZE:-1000}
+      - MESSAGE_TTL_MS=${MESSAGE_TTL_MS:-3600000}
+    volumes:
+      # Mount logs directory for persistence (optional)
+      - ./logs:/app/server/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits (optional, adjust as needed)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
