@@ -14,7 +14,8 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         overlay: resolve(__dirname, 'overlay.html'),
-        mobile: resolve(__dirname, 'mobile.html')
+        mobile: resolve(__dirname, 'mobile.html'),
+        test: resolve(__dirname, 'test-livepix.html')
       }
     }
   }
