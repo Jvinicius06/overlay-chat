@@ -4,9 +4,9 @@ import { getChannelColor } from '../merger/channelColors.js';
 /**
  * Setup API routes
  * @param {Object} fastify - Fastify instance
- * @param {Object} deps - Dependencies (twitchClient, messageBuffer, sseManager, etc)
+ * @param {Object} deps - Dependencies (twitchClient, messageBuffer, sseManager, audioStreamManager, etc)
  */
-export function setupRoutes(fastify, { server, twitchClient, messageBuffer, sseManager, channelColors }) {
+export function setupRoutes(fastify, { server, twitchClient, messageBuffer, sseManager, audioStreamManager, channelColors }) {
 
   // Health check
   fastify.get('/api/health', async (request, reply) => {
@@ -43,6 +43,14 @@ export function setupRoutes(fastify, { server, twitchClient, messageBuffer, sseM
   // SSE stream endpoint
   fastify.get('/api/chat/stream', async (request, reply) => {
     return sseManager.handleConnection(request, reply);
+  });
+
+  // Audio stream endpoint (for LivePix audio via Puppeteer)
+  fastify.get('/api/audio/stream', async (request, reply) => {
+    if (!audioStreamManager) {
+      return reply.code(503).send({ error: 'Audio stream not available' });
+    }
+    return audioStreamManager.handleConnection(request, reply);
   });
 
   // Get message history

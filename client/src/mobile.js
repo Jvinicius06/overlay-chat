@@ -22,6 +22,15 @@ class MobileChat {
     this.lastScrollTop = 0; // Track last scroll position to detect manual scrolling
     this.isSyncing = false; // Track if currently syncing missed messages
     this.SEQUENCE_STORAGE_KEY = 'mobile_last_sequence'; // LocalStorage key
+
+    // Audio controls
+    this.currentAudio = null; // Currently playing audio
+    this.lastAudioData = null; // Last audio data for replay
+    this.audioQueue = []; // Queue of audio to play
+    this.isPlayingAudio = false; // Flag to track if audio is currently playing
+    this.skipButtonEl = null; // Skip button (only when playing)
+    this.replayButtonEl = null; // Replay button (always visible)
+    this.audioUnlocked = false; // Flag to track if audio context is unlocked
   }
 
   /**
@@ -36,8 +45,11 @@ class MobileChat {
     // Create UI
     this.createUI();
 
-    // Load LivePix iframe (for audio alerts)
-    this.loadLivePixIframe();
+    // Create audio controls
+    this.createAudioControls();
+
+    // Load LivePix audio (via server-side Puppeteer capture)
+    this.loadLivePixAudio();
 
     // Subscribe to message store changes
     this.messageStore.subscribe((messages) => {
@@ -89,28 +101,283 @@ class MobileChat {
   }
 
   /**
-   * Load LivePix iframes for audio alerts
+   * Load LivePix audio via SSE (server-side Puppeteer capture)
    */
-  async loadLivePixIframe() {
+  async loadLivePixAudio() {
     try {
       const response = await fetch(`${SERVER_URL}/api/livepix/urls`);
       const data = await response.json();
 
       if (data.enabled && data.urls && data.urls.length > 0) {
-        console.log(`[Mobile] Loading ${data.count} LivePix iframe(s) for audio alerts`);
+        console.log(`[Mobile] LivePix audio enabled (${data.count} source(s))`);
 
         // Create audio unlock button (required for mobile browsers)
         this.createAudioUnlockButton();
 
-        // Create floating container for LivePix
-        this.createLivePixFloatingContainer(data.urls);
+        // Connect to audio SSE stream
+        this.connectAudioStream();
 
-        console.log(`[Mobile] All ${data.count} LivePix iframe(s) loaded successfully`);
+        console.log(`[Mobile] Audio stream connection initiated`);
       } else {
         console.log('[Mobile] LivePix not configured (LIVEPIX_URLS not set in .env)');
       }
     } catch (error) {
-      console.error('[Mobile] Failed to load LivePix iframes:', error);
+      console.error('[Mobile] Failed to initialize audio:', error);
+    }
+  }
+
+  /**
+   * Connect to audio SSE stream
+   */
+  connectAudioStream() {
+    try {
+      this.audioSSE = new EventSource(`${SERVER_URL}/api/audio/stream`);
+
+      this.audioSSE.addEventListener('connected', (e) => {
+        const data = JSON.parse(e.data);
+        console.log('[Mobile] Audio stream connected:', data);
+      });
+
+      this.audioSSE.addEventListener('audio', (e) => {
+        const data = JSON.parse(e.data);
+        console.log('[Mobile] Audio received:', {
+          source: data.source,
+          size: data.size,
+          url: data.url
+        });
+
+        // Add to queue
+        this.enqueueAudio(data.audio, data.contentType);
+      });
+
+      this.audioSSE.addEventListener('heartbeat', (e) => {
+        const data = JSON.parse(e.data);
+        console.log('[Mobile] Audio stream heartbeat:', data);
+      });
+
+      this.audioSSE.onerror = (error) => {
+        console.error('[Mobile] Audio stream error:', error);
+        // Auto-reconnect after 5 seconds
+        setTimeout(() => {
+          console.log('[Mobile] Reconnecting audio stream...');
+          this.connectAudioStream();
+        }, 5000);
+      };
+
+    } catch (error) {
+      console.error('[Mobile] Failed to connect to audio stream:', error);
+    }
+  }
+
+  /**
+   * Enqueue audio for playback
+   */
+  enqueueAudio(base64Audio, contentType = 'audio/mpeg') {
+    // Check if audio context is unlocked
+    if (!this.audioUnlocked) {
+      console.warn('[Mobile] ⚠️ Audio blocked - user needs to click unlock button first');
+      // Save for later playback after user unlocks
+      this.lastAudioData = { base64Audio, contentType };
+      return;
+    }
+
+    // Add to queue
+    this.audioQueue.push({ base64Audio, contentType });
+    console.log(`[Mobile] Audio added to queue (queue size: ${this.audioQueue.length})`);
+
+    // If not playing, start playing
+    if (!this.isPlayingAudio) {
+      this.playNextInQueue();
+    }
+  }
+
+  /**
+   * Play next audio in queue
+   */
+  playNextInQueue() {
+    // If already playing or queue is empty, do nothing
+    if (this.isPlayingAudio || this.audioQueue.length === 0) {
+      return;
+    }
+
+    // Get next audio from queue
+    const audioData = this.audioQueue.shift();
+    console.log(`[Mobile] Playing next audio from queue (remaining: ${this.audioQueue.length})`);
+
+    // Play it
+    this.playAudioFromBase64(audioData.base64Audio, audioData.contentType);
+  }
+
+  /**
+   * Play audio from base64 string
+   */
+  playAudioFromBase64(base64Audio, contentType = 'audio/mpeg') {
+    try {
+      // Mark as playing
+      this.isPlayingAudio = true;
+
+      // Stop current audio if playing
+      if (this.currentAudio) {
+        this.currentAudio.pause();
+        this.currentAudio = null;
+      }
+
+      // Convert base64 to Blob
+      const byteCharacters = atob(base64Audio);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: contentType });
+
+      // Create object URL
+      const audioUrl = URL.createObjectURL(blob);
+
+      // Save audio data for replay
+      this.lastAudioData = { base64Audio, contentType, audioUrl };
+
+      // Create and play audio element
+      const audio = new Audio(audioUrl);
+      audio.volume = 1.0; // Max volume
+      this.currentAudio = audio;
+
+      // Show skip button
+      this.showSkipButton();
+
+      audio.play().then(() => {
+        console.log('[Mobile] ✅ Audio playing');
+      }).catch((error) => {
+        console.error('[Mobile] ❌ Failed to play audio:', error);
+        this.hideSkipButton();
+        this.isPlayingAudio = false;
+        // Try next in queue
+        this.playNextInQueue();
+      });
+
+      // Clean up when audio ends
+      audio.addEventListener('ended', () => {
+        URL.revokeObjectURL(audioUrl);
+        this.currentAudio = null;
+        this.isPlayingAudio = false;
+        this.hideSkipButton();
+        console.log('[Mobile] Audio ended, playing next in queue...');
+
+        // Play next audio in queue
+        this.playNextInQueue();
+      });
+
+      // Handle audio errors
+      audio.addEventListener('error', () => {
+        console.error('[Mobile] Audio error occurred');
+        URL.revokeObjectURL(audioUrl);
+        this.currentAudio = null;
+        this.isPlayingAudio = false;
+        this.hideSkipButton();
+
+        // Try next in queue
+        this.playNextInQueue();
+      });
+
+    } catch (error) {
+      console.error('[Mobile] Error playing audio:', error);
+      this.isPlayingAudio = false;
+      this.hideSkipButton();
+
+      // Try next in queue
+      this.playNextInQueue();
+    }
+  }
+
+  /**
+   * Create audio controls UI
+   */
+  createAudioControls() {
+    // Create Skip button (floating, only when audio is playing)
+    this.skipButtonEl = document.createElement('button');
+    this.skipButtonEl.className = 'skip-audio-btn hidden';
+    this.skipButtonEl.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 4 15 12 5 20 5 4"></polygon>
+        <line x1="19" y1="5" x2="19" y2="19"></line>
+      </svg>
+      Skip
+    `;
+    this.skipButtonEl.addEventListener('click', () => {
+      this.skipAudio();
+    });
+    document.body.appendChild(this.skipButtonEl);
+
+    // Create Replay button (fixed top-right, always visible)
+    this.replayButtonEl = document.createElement('button');
+    this.replayButtonEl.className = 'replay-audio-btn';
+    this.replayButtonEl.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="1 4 1 10 7 10"></polyline>
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+      </svg>
+      Replay
+    `;
+    this.replayButtonEl.addEventListener('click', () => {
+      this.replayAudio();
+    });
+    document.body.appendChild(this.replayButtonEl);
+  }
+
+  /**
+   * Show skip button
+   */
+  showSkipButton() {
+    if (this.skipButtonEl) {
+      this.skipButtonEl.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * Hide skip button
+   */
+  hideSkipButton() {
+    if (this.skipButtonEl) {
+      this.skipButtonEl.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Skip current audio and play next in queue
+   */
+  skipAudio() {
+    if (this.currentAudio) {
+      console.log(`[Mobile] Skipping audio (${this.audioQueue.length} remaining in queue)`);
+      this.currentAudio.pause();
+      this.currentAudio = null;
+      this.isPlayingAudio = false;
+      this.hideSkipButton();
+
+      // Play next in queue
+      this.playNextInQueue();
+    }
+  }
+
+  /**
+   * Replay last audio (add to front of queue)
+   */
+  replayAudio() {
+    if (this.lastAudioData) {
+      console.log('[Mobile] Replaying last audio (adding to front of queue)');
+      // Add to front of queue
+      this.audioQueue.unshift({
+        base64Audio: this.lastAudioData.base64Audio,
+        contentType: this.lastAudioData.contentType
+      });
+
+      // If not playing, start playing
+      if (!this.isPlayingAudio) {
+        this.playNextInQueue();
+      } else {
+        console.log(`[Mobile] Replay queued (will play after current audio, queue size: ${this.audioQueue.length})`);
+      }
+    } else {
+      console.log('[Mobile] No audio to replay');
     }
   }
 
@@ -245,54 +512,38 @@ class MobileChat {
     button.addEventListener('click', async () => {
       console.log('[Mobile] User clicked audio unlock button');
 
-      // Safari iOS: Request Storage Access API for cookies/localStorage in iframes
-      // This is CRITICAL for Safari iOS 13.4+ which blocks third-party cookies by default
-      if (document.requestStorageAccess) {
-        try {
-          await document.requestStorageAccess();
-          console.log('[Mobile] ✅ Storage access granted (cookies/localStorage enabled for iframes)');
-        } catch (e) {
-          console.log('[Mobile] ⚠️ Storage access denied or not needed:', e.message);
+      try {
+        // Use Web Audio API to unlock audio context (more reliable than data URL)
+        // This is REQUIRED on iOS/Safari before any audio can play
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioContext = new AudioContext();
+
+        // Create a silent buffer and play it
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+
+        console.log('[Mobile] ✅ Audio context unlocked - ready to receive audio from server');
+
+        // Mark audio as unlocked
+        this.audioUnlocked = true;
+
+        // If there's a pending audio, add it to queue and start playing
+        if (this.lastAudioData && this.lastAudioData.base64Audio) {
+          console.log('[Mobile] Enqueuing pending audio...');
+          this.audioQueue.push({
+            base64Audio: this.lastAudioData.base64Audio,
+            contentType: this.lastAudioData.contentType
+          });
+          // Start playing queue
+          this.playNextInQueue();
         }
-      } else {
-        console.log('[Mobile] Storage Access API not supported (may not be needed)');
+
+      } catch (e) {
+        console.error('[Mobile] ❌ Could not unlock audio:', e);
       }
-
-      // Get all LivePix iframes (now in floating container)
-      const iframes = document.querySelectorAll('.livepix-floating-iframe');
-
-      iframes.forEach((iframe, index) => {
-        try {
-          // Store the original src
-          const originalSrc = iframe.src;
-
-          // Method 1: Try to post message to iframe
-          if (iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: 'user-interaction', action: 'play' }, '*');
-            console.log(`[Mobile] Posted message to iframe ${index}`);
-          }
-
-          // Method 2: Reload iframe to trigger WebSocket connection after user interaction
-          // This ensures the iframe loads with audio unlocked AND storage access granted
-          iframe.src = '';
-          setTimeout(() => {
-            iframe.src = originalSrc;
-            console.log(`[Mobile] Reloaded iframe ${index} with audio + storage access`);
-          }, 100);
-
-        } catch (e) {
-          console.log(`[Mobile] Error unlocking iframe ${index}:`, e);
-        }
-      });
-
-      // Create a silent audio element and play it to unlock audio context
-      // This is required on iOS/Safari
-      const silentAudio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAhgCmLqAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZDwP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV');
-      silentAudio.play().then(() => {
-        console.log('[Mobile] Silent audio played - audio context unlocked');
-      }).catch(e => {
-        console.log('[Mobile] Could not play silent audio:', e);
-      });
 
       // Hide the button after first interaction
       button.classList.add('unlocked');
@@ -300,7 +551,7 @@ class MobileChat {
         button.remove();
       }, 300);
 
-      console.log('[Mobile] Audio unlock process completed');
+      console.log('[Mobile] Audio unlock completed - audio from SSE will now play automatically');
     });
 
     document.body.appendChild(button);

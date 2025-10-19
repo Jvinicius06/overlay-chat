@@ -8,6 +8,8 @@ import logger from './utils/logger.js';
 import { TwitchClient } from './twitch/client.js';
 import { MergedCircularBuffer } from './buffer/mergedBuffer.js';
 import { SSEManager } from './api/sse.js';
+import { AudioStreamManager } from './api/audioStream.js';
+import { LivePixAudioCapture } from './livepix/audioCapture.js';
 import { setupRoutes } from './api/routes.js';
 import { getChannelColor } from './merger/channelColors.js';
 
@@ -23,6 +25,8 @@ class OverlayChatServer {
     this.twitchClient = null;
     this.messageBuffer = null;
     this.sseManager = null;
+    this.audioStreamManager = null;
+    this.audioCapture = null;
     this.channelColors = new Map();
     this.messageSequence = 0; // Global sequence counter for message synchronization
   }
@@ -65,6 +69,32 @@ class OverlayChatServer {
     this.sseManager = new SSEManager(this.messageBuffer, config, this);
     logger.info('SSE manager initialized');
 
+    // Initialize Audio Stream Manager
+    this.audioStreamManager = new AudioStreamManager();
+    logger.info('Audio stream manager initialized');
+
+    // Initialize LivePix Audio Capture (if configured)
+    if (config.livepix.urls && config.livepix.urls.length > 0) {
+      this.audioCapture = new LivePixAudioCapture(config.livepix.urls);
+
+      // When audio is captured, broadcast to all audio stream clients
+      this.audioCapture.on('audio', (audioData) => {
+        logger.info('[AudioCapture] Broadcasting audio to clients');
+        this.audioStreamManager.broadcast(audioData);
+      });
+
+      // Start audio capture
+      try {
+        await this.audioCapture.start();
+        logger.info('LivePix audio capture started');
+      } catch (error) {
+        logger.error('[AudioCapture] Failed to start:', error);
+        logger.warn('Continuing without audio capture...');
+      }
+    } else {
+      logger.info('LivePix audio capture disabled (no URLs configured)');
+    }
+
     // Initialize channel colors
     config.twitch.channels.forEach(channel => {
       this.channelColors.set(channel, getChannelColor(channel));
@@ -97,6 +127,7 @@ class OverlayChatServer {
       twitchClient: this.twitchClient,
       messageBuffer: this.messageBuffer,
       sseManager: this.sseManager,
+      audioStreamManager: this.audioStreamManager,
       channelColors: this.channelColors
     });
 
@@ -169,10 +200,22 @@ class OverlayChatServer {
   async shutdown() {
     logger.info('Shutting down server...');
 
+    // Stop audio capture
+    if (this.audioCapture) {
+      await this.audioCapture.stop();
+    }
+
+    // Shutdown audio stream manager
+    if (this.audioStreamManager) {
+      this.audioStreamManager.shutdown();
+    }
+
+    // Disconnect Twitch client
     if (this.twitchClient) {
       this.twitchClient.disconnect();
     }
 
+    // Close HTTP server
     if (this.fastify) {
       await this.fastify.close();
     }
