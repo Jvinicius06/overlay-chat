@@ -186,13 +186,10 @@ class MobileChat {
     this.audioQueue.push({ base64Audio, contentType });
     console.log(`[Mobile] Audio added to queue (queue size: ${this.audioQueue.length})`);
 
-    // Update skip button visibility
+    // Update skip button visibility (will show "Play" button)
     this.updateSkipButton();
 
-    // If not playing, start playing
-    if (!this.isPlayingAudio) {
-      this.playNextInQueue();
-    }
+    // NO auto-play - user must click button to play
   }
 
   /**
@@ -209,10 +206,7 @@ class MobileChat {
     const audioData = this.audioQueue.shift();
     console.log(`[Mobile] Playing next audio from queue (remaining: ${this.audioQueue.length})`);
 
-    // Update skip button visibility
-    this.updateSkipButton();
-
-    // Play it
+    // Play it (updateSkipButton will be called after isPlayingAudio=true)
     this.playAudioFromBase64(audioData.base64Audio, audioData.contentType);
   }
 
@@ -494,12 +488,10 @@ class MobileChat {
         contentType: this.lastAudioData.contentType
       });
 
-      // If not playing, start playing
-      if (!this.isPlayingAudio) {
-        this.playNextInQueue();
-      } else {
-        console.log(`[Mobile] Replay queued (will play after current audio, queue size: ${this.audioQueue.length})`);
-      }
+      // Update button to show queue
+      this.updateSkipButton();
+
+      console.log(`[Mobile] Replay added to queue (queue size: ${this.audioQueue.length}) - click Play to start`);
     } else {
       console.log('[Mobile] No audio to replay');
     }
@@ -654,15 +646,16 @@ class MobileChat {
         // Mark audio as unlocked
         this.audioUnlocked = true;
 
-        // If there's a pending audio, add it to queue and start playing
+        // If there's a pending audio, add it to queue (NO auto-play)
         if (this.lastAudioData && this.lastAudioData.base64Audio) {
           console.log('[Mobile] Enqueuing pending audio...');
           this.audioQueue.push({
             base64Audio: this.lastAudioData.base64Audio,
             contentType: this.lastAudioData.contentType
           });
-          // Start playing queue
-          this.playNextInQueue();
+          // Update button to show queue with "Play" button
+          this.updateSkipButton();
+          console.log('[Mobile] Audio ready in queue - click Play button to start');
         }
 
       } catch (e) {
