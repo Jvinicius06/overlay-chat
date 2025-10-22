@@ -112,10 +112,7 @@ class MobileChat {
       if (data.enabled && data.urls && data.urls.length > 0) {
         console.log(`[Mobile] LivePix audio enabled (${data.count} source(s))`);
 
-        // Create audio unlock button (required for mobile browsers)
-        this.createAudioUnlockButton();
-
-        // Connect to audio SSE stream
+        // Connect to audio SSE stream (audio will be unlocked on first Play button click)
         this.connectAudioStream();
 
         console.log(`[Mobile] Audio stream connection initiated`);
@@ -174,17 +171,12 @@ class MobileChat {
    * Enqueue audio for playback
    */
   enqueueAudio(base64Audio, contentType = 'audio/mpeg') {
-    // Check if audio context is unlocked
-    if (!this.audioUnlocked) {
-      console.warn('[Mobile] ⚠️ Audio blocked - user needs to click unlock button first');
-      // Save for later playback after user unlocks
-      this.lastAudioData = { base64Audio, contentType };
-      return;
-    }
-
-    // Add to queue
+    // Add to queue (audio will be unlocked when user clicks Play button)
     this.audioQueue.push({ base64Audio, contentType });
     console.log(`[Mobile] Audio added to queue (queue size: ${this.audioQueue.length})`);
+
+    // Save last audio for replay
+    this.lastAudioData = { base64Audio, contentType };
 
     // Update skip button visibility (will show "Play" button)
     this.updateSkipButton();
@@ -455,8 +447,30 @@ class MobileChat {
    * Skip current audio and play next in queue
    * If no audio playing but queue has items, play next
    */
-  skipAudio() {
+  async skipAudio() {
     console.log(`[Mobile] Skip/Next clicked (playing: ${this.isPlayingAudio}, queue: ${this.audioQueue.length})`);
+
+    // Unlock audio on first interaction (required for iOS/Safari)
+    if (!this.audioUnlocked) {
+      console.log('[Mobile] First click - unlocking audio context...');
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioContext = new AudioContext();
+
+        // Create a silent buffer and play it
+        const buffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+
+        this.audioUnlocked = true;
+        console.log('[Mobile] ✅ Audio unlocked successfully');
+      } catch (e) {
+        console.error('[Mobile] ❌ Failed to unlock audio:', e);
+        return; // Don't proceed if unlock failed
+      }
+    }
 
     // If currently playing, stop it
     if (this.currentAudio && this.isPlayingAudio) {
@@ -607,71 +621,6 @@ class MobileChat {
     function dragEnd(e) {
       isDragging = false;
     }
-  }
-
-  /**
-   * Create audio unlock button for mobile browsers
-   * Mobile browsers require user interaction before playing audio
-   */
-  createAudioUnlockButton() {
-    const button = document.createElement('button');
-    button.className = 'audio-unlock-button';
-    button.innerHTML = `
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-      </svg>
-      <span>Toque para ativar áudio</span>
-    `;
-
-    button.addEventListener('click', async () => {
-      console.log('[Mobile] User clicked audio unlock button');
-
-      try {
-        // Use Web Audio API to unlock audio context (more reliable than data URL)
-        // This is REQUIRED on iOS/Safari before any audio can play
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const audioContext = new AudioContext();
-
-        // Create a silent buffer and play it
-        const buffer = audioContext.createBuffer(1, 1, 22050);
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start(0);
-
-        console.log('[Mobile] ✅ Audio context unlocked - ready to receive audio from server');
-
-        // Mark audio as unlocked
-        this.audioUnlocked = true;
-
-        // If there's a pending audio, add it to queue (NO auto-play)
-        if (this.lastAudioData && this.lastAudioData.base64Audio) {
-          console.log('[Mobile] Enqueuing pending audio...');
-          this.audioQueue.push({
-            base64Audio: this.lastAudioData.base64Audio,
-            contentType: this.lastAudioData.contentType
-          });
-          // Update button to show queue with "Play" button
-          this.updateSkipButton();
-          console.log('[Mobile] Audio ready in queue - click Play button to start');
-        }
-
-      } catch (e) {
-        console.error('[Mobile] ❌ Could not unlock audio:', e);
-      }
-
-      // Hide the button after first interaction
-      button.classList.add('unlocked');
-      setTimeout(() => {
-        button.remove();
-      }, 300);
-
-      console.log('[Mobile] Audio unlock completed - audio from SSE will now play automatically');
-    });
-
-    document.body.appendChild(button);
   }
 
   /**
