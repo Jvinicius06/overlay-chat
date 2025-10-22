@@ -28,8 +28,7 @@ class MobileChat {
     this.lastAudioData = null; // Last audio data for replay
     this.audioQueue = []; // Queue of audio to play
     this.isPlayingAudio = false; // Flag to track if audio is currently playing
-    this.skipButtonEl = null; // Skip button (only when playing)
-    this.nextButtonEl = null; // Next button (only when queue has items)
+    this.skipButtonEl = null; // Skip/Next button (shows queue size)
     this.replayButtonEl = null; // Replay button (always visible)
     this.audioUnlocked = false; // Flag to track if audio context is unlocked
     this.audioMonitorInterval = null; // Interval to monitor audio playback
@@ -187,8 +186,8 @@ class MobileChat {
     this.audioQueue.push({ base64Audio, contentType });
     console.log(`[Mobile] Audio added to queue (queue size: ${this.audioQueue.length})`);
 
-    // Update next button visibility
-    this.updateNextButton();
+    // Update skip button visibility
+    this.updateSkipButton();
 
     // If not playing, start playing
     if (!this.isPlayingAudio) {
@@ -202,7 +201,7 @@ class MobileChat {
   playNextInQueue() {
     // If already playing or queue is empty, do nothing
     if (this.isPlayingAudio || this.audioQueue.length === 0) {
-      this.updateNextButton(); // Update button even if not playing
+      this.updateSkipButton(); // Update button even if not playing
       return;
     }
 
@@ -210,8 +209,8 @@ class MobileChat {
     const audioData = this.audioQueue.shift();
     console.log(`[Mobile] Playing next audio from queue (remaining: ${this.audioQueue.length})`);
 
-    // Update next button visibility
-    this.updateNextButton();
+    // Update skip button visibility
+    this.updateSkipButton();
 
     // Play it
     this.playAudioFromBase64(audioData.base64Audio, audioData.contentType);
@@ -311,34 +310,21 @@ class MobileChat {
    * Create audio controls UI
    */
   createAudioControls() {
-    // Create Skip button (floating bottom-left, only when audio is playing)
+    // Create Skip/Next button (shows when playing or queue has items)
     this.skipButtonEl = document.createElement('button');
     this.skipButtonEl.className = 'skip-audio-btn hidden';
     this.skipButtonEl.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polygon points="5 4 15 12 5 20 5 4"></polygon>
         <line x1="19" y1="5" x2="19" y2="19"></line>
       </svg>
-      Skip
+      <span class="skip-text">Skip</span>
+      <span class="queue-badge hidden">0</span>
     `;
     this.skipButtonEl.addEventListener('click', () => {
       this.skipAudio();
     });
     document.body.appendChild(this.skipButtonEl);
-
-    // Create Next button (floating bottom-center, only when queue has items)
-    this.nextButtonEl = document.createElement('button');
-    this.nextButtonEl.className = 'next-audio-btn hidden';
-    this.nextButtonEl.innerHTML = `
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>
-      <span class="queue-badge">0</span>
-    `;
-    this.nextButtonEl.addEventListener('click', () => {
-      this.playNextManually();
-    });
-    document.body.appendChild(this.nextButtonEl);
 
     // Create Replay button (fixed top-right, always visible)
     this.replayButtonEl = document.createElement('button');
@@ -357,71 +343,60 @@ class MobileChat {
   }
 
   /**
-   * Show skip button
+   * Update skip button based on playing state and queue size
    */
-  showSkipButton() {
-    if (this.skipButtonEl) {
-      this.skipButtonEl.classList.remove('hidden');
-    }
-  }
-
-  /**
-   * Hide skip button
-   */
-  hideSkipButton() {
-    if (this.skipButtonEl) {
-      this.skipButtonEl.classList.add('hidden');
-    }
-  }
-
-  /**
-   * Update Next button visibility based on queue size
-   */
-  updateNextButton() {
-    if (!this.nextButtonEl) return;
+  updateSkipButton() {
+    if (!this.skipButtonEl) return;
 
     const queueSize = this.audioQueue.length;
-    const badge = this.nextButtonEl.querySelector('.queue-badge');
+    const badge = this.skipButtonEl.querySelector('.queue-badge');
+    const text = this.skipButtonEl.querySelector('.skip-text');
 
-    if (queueSize > 0) {
-      // Show button and update badge
-      this.nextButtonEl.classList.remove('hidden');
+    // Show button if audio is playing OR queue has items
+    if (this.isPlayingAudio || queueSize > 0) {
+      this.skipButtonEl.classList.remove('hidden');
+
+      // Update badge
       if (badge) {
-        badge.textContent = queueSize;
+        if (queueSize > 0) {
+          badge.classList.remove('hidden');
+          badge.textContent = queueSize;
+        } else {
+          badge.classList.add('hidden');
+        }
       }
-      console.log(`[Mobile] Next button visible (${queueSize} in queue)`);
+
+      // Update text based on state
+      if (text) {
+        if (this.isPlayingAudio && queueSize > 0) {
+          text.textContent = 'Next';
+        } else if (this.isPlayingAudio) {
+          text.textContent = 'Skip';
+        } else {
+          text.textContent = 'Play';
+        }
+      }
+
+      console.log(`[Mobile] Skip button visible (playing: ${this.isPlayingAudio}, queue: ${queueSize})`);
     } else {
       // Hide button
-      this.nextButtonEl.classList.add('hidden');
-      console.log('[Mobile] Next button hidden (queue empty)');
+      this.skipButtonEl.classList.add('hidden');
+      console.log('[Mobile] Skip button hidden');
     }
   }
 
   /**
-   * Play next audio manually (skip current and play next from queue)
+   * Show skip button (legacy compatibility)
    */
-  playNextManually() {
-    console.log(`[Mobile] Play next manually (queue size: ${this.audioQueue.length})`);
+  showSkipButton() {
+    this.updateSkipButton();
+  }
 
-    // Stop current audio if playing
-    if (this.currentAudio && this.isPlayingAudio) {
-      console.log('[Mobile] Stopping current audio...');
-      this.stopAudioMonitoring();
-      this.currentAudio.pause();
-      this.currentAudio = null;
-      this.isPlayingAudio = false;
-      this.hideSkipButton();
-    }
-
-    // Play next in queue
-    if (this.audioQueue.length > 0) {
-      this.playNextInQueue();
-    } else {
-      console.log('[Mobile] No audio in queue to play');
-    }
-
-    // Update button visibility
-    this.updateNextButton();
+  /**
+   * Hide skip button (legacy compatibility)
+   */
+  hideSkipButton() {
+    this.updateSkipButton();
   }
 
   /**
@@ -484,18 +459,26 @@ class MobileChat {
 
   /**
    * Skip current audio and play next in queue
+   * If no audio playing but queue has items, play next
    */
   skipAudio() {
-    if (this.currentAudio) {
-      console.log(`[Mobile] Skipping audio (${this.audioQueue.length} remaining in queue)`);
+    console.log(`[Mobile] Skip/Next clicked (playing: ${this.isPlayingAudio}, queue: ${this.audioQueue.length})`);
+
+    // If currently playing, stop it
+    if (this.currentAudio && this.isPlayingAudio) {
+      console.log('[Mobile] Stopping current audio...');
       this.stopAudioMonitoring();
       this.currentAudio.pause();
       this.currentAudio = null;
       this.isPlayingAudio = false;
-      this.hideSkipButton();
+    }
 
-      // Play next in queue
+    // Play next in queue (if available)
+    if (this.audioQueue.length > 0) {
       this.playNextInQueue();
+    } else {
+      console.log('[Mobile] No audio in queue');
+      this.updateSkipButton();
     }
   }
 
