@@ -29,8 +29,10 @@ class MobileChat {
     this.audioQueue = []; // Queue of audio to play
     this.isPlayingAudio = false; // Flag to track if audio is currently playing
     this.skipButtonEl = null; // Skip button (only when playing)
+    this.nextButtonEl = null; // Next button (only when queue has items)
     this.replayButtonEl = null; // Replay button (always visible)
     this.audioUnlocked = false; // Flag to track if audio context is unlocked
+    this.audioMonitorInterval = null; // Interval to monitor audio playback
   }
 
   /**
@@ -185,6 +187,9 @@ class MobileChat {
     this.audioQueue.push({ base64Audio, contentType });
     console.log(`[Mobile] Audio added to queue (queue size: ${this.audioQueue.length})`);
 
+    // Update next button visibility
+    this.updateNextButton();
+
     // If not playing, start playing
     if (!this.isPlayingAudio) {
       this.playNextInQueue();
@@ -197,12 +202,16 @@ class MobileChat {
   playNextInQueue() {
     // If already playing or queue is empty, do nothing
     if (this.isPlayingAudio || this.audioQueue.length === 0) {
+      this.updateNextButton(); // Update button even if not playing
       return;
     }
 
     // Get next audio from queue
     const audioData = this.audioQueue.shift();
     console.log(`[Mobile] Playing next audio from queue (remaining: ${this.audioQueue.length})`);
+
+    // Update next button visibility
+    this.updateNextButton();
 
     // Play it
     this.playAudioFromBase64(audioData.base64Audio, audioData.contentType);
@@ -247,6 +256,8 @@ class MobileChat {
 
       audio.play().then(() => {
         console.log('[Mobile] ✅ Audio playing');
+        // Start monitoring audio playback (for Safari/iOS compatibility)
+        this.startAudioMonitoring();
       }).catch((error) => {
         console.error('[Mobile] ❌ Failed to play audio:', error);
         this.hideSkipButton();
@@ -256,20 +267,27 @@ class MobileChat {
       });
 
       // Clean up when audio ends
-      audio.addEventListener('ended', () => {
+      const handleAudioEnded = () => {
+        console.log('[Mobile] Audio ended event fired');
+        this.stopAudioMonitoring();
         URL.revokeObjectURL(audioUrl);
         this.currentAudio = null;
         this.isPlayingAudio = false;
         this.hideSkipButton();
-        console.log('[Mobile] Audio ended, playing next in queue...');
+        console.log('[Mobile] Playing next in queue...');
 
         // Play next audio in queue
         this.playNextInQueue();
-      });
+      };
+
+      // Use both addEventListener and direct property (Safari compatibility)
+      audio.addEventListener('ended', handleAudioEnded);
+      audio.onended = handleAudioEnded;
 
       // Handle audio errors
-      audio.addEventListener('error', () => {
-        console.error('[Mobile] Audio error occurred');
+      audio.addEventListener('error', (e) => {
+        console.error('[Mobile] Audio error occurred:', e);
+        this.stopAudioMonitoring();
         URL.revokeObjectURL(audioUrl);
         this.currentAudio = null;
         this.isPlayingAudio = false;
@@ -293,7 +311,7 @@ class MobileChat {
    * Create audio controls UI
    */
   createAudioControls() {
-    // Create Skip button (floating, only when audio is playing)
+    // Create Skip button (floating bottom-left, only when audio is playing)
     this.skipButtonEl = document.createElement('button');
     this.skipButtonEl.className = 'skip-audio-btn hidden';
     this.skipButtonEl.innerHTML = `
@@ -307,6 +325,20 @@ class MobileChat {
       this.skipAudio();
     });
     document.body.appendChild(this.skipButtonEl);
+
+    // Create Next button (floating bottom-center, only when queue has items)
+    this.nextButtonEl = document.createElement('button');
+    this.nextButtonEl.className = 'next-audio-btn hidden';
+    this.nextButtonEl.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
+      <span class="queue-badge">0</span>
+    `;
+    this.nextButtonEl.addEventListener('click', () => {
+      this.playNextManually();
+    });
+    document.body.appendChild(this.nextButtonEl);
 
     // Create Replay button (fixed top-right, always visible)
     this.replayButtonEl = document.createElement('button');
@@ -343,11 +375,120 @@ class MobileChat {
   }
 
   /**
+   * Update Next button visibility based on queue size
+   */
+  updateNextButton() {
+    if (!this.nextButtonEl) return;
+
+    const queueSize = this.audioQueue.length;
+    const badge = this.nextButtonEl.querySelector('.queue-badge');
+
+    if (queueSize > 0) {
+      // Show button and update badge
+      this.nextButtonEl.classList.remove('hidden');
+      if (badge) {
+        badge.textContent = queueSize;
+      }
+      console.log(`[Mobile] Next button visible (${queueSize} in queue)`);
+    } else {
+      // Hide button
+      this.nextButtonEl.classList.add('hidden');
+      console.log('[Mobile] Next button hidden (queue empty)');
+    }
+  }
+
+  /**
+   * Play next audio manually (skip current and play next from queue)
+   */
+  playNextManually() {
+    console.log(`[Mobile] Play next manually (queue size: ${this.audioQueue.length})`);
+
+    // Stop current audio if playing
+    if (this.currentAudio && this.isPlayingAudio) {
+      console.log('[Mobile] Stopping current audio...');
+      this.stopAudioMonitoring();
+      this.currentAudio.pause();
+      this.currentAudio = null;
+      this.isPlayingAudio = false;
+      this.hideSkipButton();
+    }
+
+    // Play next in queue
+    if (this.audioQueue.length > 0) {
+      this.playNextInQueue();
+    } else {
+      console.log('[Mobile] No audio in queue to play');
+    }
+
+    // Update button visibility
+    this.updateNextButton();
+  }
+
+  /**
+   * Start monitoring audio playback (Safari/iOS compatibility)
+   * Polls every 500ms to check if audio has ended
+   */
+  startAudioMonitoring() {
+    // Clear any existing monitor
+    this.stopAudioMonitoring();
+
+    let checkCount = 0;
+    this.audioMonitorInterval = setInterval(() => {
+      checkCount++;
+
+      if (!this.currentAudio) {
+        console.log('[Mobile] Audio monitor: No current audio, stopping monitor');
+        this.stopAudioMonitoring();
+        return;
+      }
+
+      const duration = this.currentAudio.duration;
+      const currentTime = this.currentAudio.currentTime;
+      const paused = this.currentAudio.paused;
+      const ended = this.currentAudio.ended;
+
+      // Log every 10 checks (every 5 seconds)
+      if (checkCount % 10 === 0) {
+        console.log(`[Mobile] Audio monitor: ${currentTime.toFixed(1)}s / ${duration.toFixed(1)}s (paused: ${paused}, ended: ${ended})`);
+      }
+
+      // Check if audio has ended
+      if (ended || (duration > 0 && currentTime >= duration - 0.1)) {
+        console.log('[Mobile] Audio monitor detected end, triggering cleanup...');
+        this.stopAudioMonitoring();
+
+        // Manually trigger end handling if event didn't fire
+        if (this.currentAudio && this.isPlayingAudio) {
+          this.currentAudio = null;
+          this.isPlayingAudio = false;
+          this.hideSkipButton();
+          console.log('[Mobile] Audio monitor: Playing next in queue...');
+          this.playNextInQueue();
+        }
+      }
+    }, 500); // Check every 500ms
+
+    console.log('[Mobile] Audio monitoring started');
+  }
+
+  /**
+   * Stop monitoring audio playback
+   */
+  stopAudioMonitoring() {
+    if (this.audioMonitorInterval) {
+      clearInterval(this.audioMonitorInterval);
+      this.audioMonitorInterval = null;
+      console.log('[Mobile] Audio monitoring stopped');
+    }
+  }
+
+  /**
    * Skip current audio and play next in queue
    */
   skipAudio() {
     if (this.currentAudio) {
       console.log(`[Mobile] Skipping audio (${this.audioQueue.length} remaining in queue)`);
+      this.stopAudioMonitoring();
       this.currentAudio.pause();
       this.currentAudio = null;
       this.isPlayingAudio = false;
