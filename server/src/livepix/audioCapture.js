@@ -14,6 +14,7 @@ export class LivePixAudioCapture extends EventEmitter {
     this.pages = [];
     this.isRunning = false;
     this.audioCache = new Map(); // Cache para evitar duplicatas
+    this.reloadTimers = new Map(); // Timers para reload de páginas
   }
 
   /**
@@ -159,6 +160,9 @@ export class LivePixAudioCapture extends EventEmitter {
               });
 
               logger.info(`[AudioCapture ${index}] Audio captured [${status}]: ${buffer.length} bytes`);
+
+              // Schedule page reload after 3 seconds to clear cache
+              this.schedulePageReload(index);
             } else {
               logger.debug(`[AudioCapture ${index}] Audio cached locally, skipping duplicate`);
             }
@@ -208,6 +212,40 @@ export class LivePixAudioCapture extends EventEmitter {
   }
 
   /**
+   * Schedule page reload after 3 seconds to clear browser cache
+   */
+  schedulePageReload(index) {
+    // Cancel any existing timer for this page
+    const existingTimer = this.reloadTimers.get(index);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      logger.debug(`[AudioCapture ${index}] Cancelled previous reload timer`);
+    }
+
+    // Schedule new reload
+    const timer = setTimeout(async () => {
+      try {
+        const pageData = this.pages.find(p => p.index === index);
+        if (pageData && pageData.page) {
+          logger.info(`[AudioCapture ${index}] Reloading page to clear cache...`);
+          await pageData.page.reload({
+            waitUntil: 'networkidle2',
+            timeout: 30000
+          });
+          logger.info(`[AudioCapture ${index}] Page reloaded successfully`);
+        }
+      } catch (error) {
+        logger.error(`[AudioCapture ${index}] Error reloading page:`, error);
+      } finally {
+        this.reloadTimers.delete(index);
+      }
+    }, 3000);
+
+    this.reloadTimers.set(index, timer);
+    logger.debug(`[AudioCapture ${index}] Scheduled page reload in 3 seconds`);
+  }
+
+  /**
    * Get cache key for audio URL
    */
   getCacheKey(url) {
@@ -226,6 +264,12 @@ export class LivePixAudioCapture extends EventEmitter {
     logger.info('[AudioCapture] Stopping audio capture...');
 
     try {
+      // Clear all reload timers
+      for (const timer of this.reloadTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.reloadTimers.clear();
+
       // Close all pages
       for (const { page } of this.pages) {
         await page.close();
