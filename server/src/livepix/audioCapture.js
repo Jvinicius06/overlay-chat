@@ -77,6 +77,9 @@ export class LivePixAudioCapture extends EventEmitter {
       // Set viewport (mobile size to save resources)
       await page.setViewport({ width: 375, height: 667 });
 
+      // Disable cache to always download fresh audio (never return 304)
+      await page.setCacheEnabled(false);
+
       // Enable request interception to capture audio files
       await page.setRequestInterception(true);
 
